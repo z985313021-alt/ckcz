@@ -191,25 +191,54 @@
 
             var ctx = event.context;
             var pixelRatio = event.frameState.pixelRatio;
+            var width = ctx.canvas.width;
+            var height = ctx.canvas.height;
 
             ctx.save();
             ctx.beginPath();
+            
+            // 绘制覆盖整个画布的外层矩形（顺时针方向）
+            ctx.moveTo(0, 0);
+            ctx.lineTo(width, 0);
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.closePath();
+
             if (mousePosition) {
-                // 只显示一个围绕着鼠标的圆圈
-                ctx.arc(mousePosition[0] * pixelRatio, mousePosition[1] * pixelRatio, radius * pixelRatio, 0, 2 * Math.PI);
-                ctx.lineWidth = 5 * pixelRatio;
-                ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-                ctx.stroke();
+                // 在鼠标位置绘制内层圆圈（逆时针方向，true 代表逆时针，形成镂空效果）
+                var x = mousePosition[0] * pixelRatio;
+                var y = mousePosition[1] * pixelRatio;
+                var r = radius * pixelRatio;
+                ctx.moveTo(x + r, y);
+                ctx.arc(x, y, r, 0, 2 * Math.PI, true);
+                ctx.closePath();
             }
+            
+            // 使用非零环绕规则进行裁剪，保留矩形内部、圆圈外部的区域（即挖空圆）
             ctx.clip();
         });
 
-        // 呈现层后恢复画布的背景
-
+        // 呈现层后恢复画布的背景，并画探照灯的边框
         esriImageryLayer.on('postrender', function (event) {
             if (!spyglassMode) return;
             var ctx = event.context;
-            ctx.restore();
+            var pixelRatio = event.frameState.pixelRatio;
+            
+            ctx.restore(); // 恢复到 clip 之前的状态
+
+            // 恢复裁剪区域后，再在最顶层绘制探照灯的半透明圆形边框
+            if (mousePosition) {
+                ctx.save();
+                ctx.beginPath();
+                var x = mousePosition[0] * pixelRatio;
+                var y = mousePosition[1] * pixelRatio;
+                var r = radius * pixelRatio;
+                ctx.arc(x, y, r, 0, 2 * Math.PI);
+                ctx.lineWidth = 5 * pixelRatio;
+                ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                ctx.stroke();
+                ctx.restore();
+            }
         });
     </script>
 </body>
