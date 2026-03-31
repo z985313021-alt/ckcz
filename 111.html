@@ -70,6 +70,35 @@
             background-color: #007bff;
             cursor: pointer;
         }
+
+        /* 弹性定位按钮样式 */
+        .button {
+            position: absolute;
+            top: 15px;
+            right: 60px;
+            z-index: 1000;
+            background-color: #28a745;
+            color: white;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 5px;
+            font-family: sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .button:hover {
+            background-color: #218838;
+            transform: scale(1.05);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+        }
+
+        .button:active {
+            transform: scale(0.98);
+        }
     </style>
 </head>
 
@@ -86,6 +115,7 @@
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
                     value="spyglass"> 裁剪：探照灯模式</label>
         </div>
+        <div class="button" id="spin">旋转定位到北京</div>
     </div>
 
     <script>
@@ -143,6 +173,9 @@
             })
         });
 
+        // 北京坐标（经纬度）
+        var beijing = ol.proj.fromLonLat([116.3974, 39.9093]);
+
         // --- 4. 监听图层切换 ---
         document.querySelectorAll('input[name="baseLayer"]').forEach(function (radio) {
             radio.addEventListener('change', function (e) {
@@ -164,6 +197,22 @@
                     map.render();
                 }
             });
+        });
+
+        // --- 4.5 监听地图点击事件，显示经纬度弹窗 ---
+        map.on('click', function (event) {
+            // 获取点击位置的像素坐标
+            var coordinate = map.getEventCoordinate(event.originalEvent);
+            
+            // 将坐标从地图投影（Web Mercator 3857）转换为经纬度（EPSG:4326）
+            var lonLat = ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326');
+            
+            // 格式化经纬度，保留6位小数
+            var longitude = lonLat[0].toFixed(6);
+            var latitude = lonLat[1].toFixed(6);
+            
+            // 显示弹窗
+            alert('点击位置坐标\n\n经度 (Longitude): ' + longitude + '\n纬度 (Latitude): ' + latitude);
         });
 
         // --- 5. 放大镜（地图裁剪）效果 ---
@@ -240,7 +289,17 @@
                 ctx.restore();
             }
         });
+
+        // --- 6. 弹性定位到北京按钮事件 ---
+        document.getElementById('spin').addEventListener('click', function () {
+            // 使用 animate() 方法实现平滑动画过渡
+            map.getView().animate({
+                center: beijing,           // 目标中心坐标
+                zoom: 12,                  // 目标缩放级别
+                duration: 1000,            // 动画时长（毫秒）
+                easing: ol.easing.elastic   // 弹性缓动效果
+            });
+        });
     </script>
 </body>
-
 </html>
