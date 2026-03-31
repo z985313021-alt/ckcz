@@ -9,6 +9,64 @@
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
 
     <style>
+        #mapCon {
+            width: 100%;
+            height: 95%;
+            position: absolute;
+        }
+
+        #menu {
+            float: left;
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 2000;
+        }
+
+        .checkbox {
+            left: 20px;
+        }
+
+        /**
+        * 提示框的样式信息
+        */
+        .tooltip {
+            position: relative;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            color: white;
+            padding: 4px 8px;
+            opacity: 0.7;
+            white-space: nowrap;
+        }
+
+        .tooltip-measure {
+            opacity: 1;
+            font-weight: bold;
+        }
+
+        .tooltip-static {
+            background-color: #ffcc33;
+            color: black;
+            border: 1px solid white;
+        }
+
+        .tooltip-measure:before,
+        .tooltip-static:before {
+            border-top: 6px solid rgba(0, 0, 0, 0.5);
+            border-right: 6px solid transparent;
+            border-left: 6px solid transparent;
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            margin-left: -7px;
+            left: 50%;
+        }
+
+        .tooltip-static:before {
+            border-top-color: #ffcc33;
+        }
+
         body,
         html {
             margin: 0;
@@ -75,7 +133,7 @@
         .button {
             position: absolute;
             top: 15px;
-            right: 60px;
+            right: 250px; /* 从 60px 改为 250px，避开右上角的鹰眼地图 */
             z-index: 1000;
             background-color: #28a745;
             color: white;
@@ -99,6 +157,10 @@
         .button:active {
             transform: scale(0.98);
         }
+
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 
@@ -116,6 +178,15 @@
                     value="spyglass"> 裁剪：探照灯模式</label>
         </div>
         <div class="button" id="spin">旋转定位到北京</div>
+    </div>
+    <div id="menu">
+        <label for="type">测量工具：</label>
+        <select id="type">
+            <option value="none">无 (停止测量)</option>
+            <option value="Length">长度 (距离)</option>
+            <option value="Area">面积</option>
+        </select>
+        <button id="clearBtn" style="margin-left: 10px; padding: 2px 6px;">清除测量结果</button>
     </div>
 
     <script>
@@ -201,21 +272,26 @@
 
         // --- 4.5 监听地图点击事件，显示经纬度弹窗 ---
         map.on('click', function (event) {
+            // 如果当前启用了测量绘图工具，则不触发坐标弹窗，避免冲突
+            if (document.getElementById('type').value !== 'none') {
+                return;
+            }
+            
             // 获取点击位置的像素坐标
             var coordinate = map.getEventCoordinate(event.originalEvent);
-            
+
             // 将坐标从地图投影（Web Mercator 3857）转换为经纬度（EPSG:4326）
             var lonLat = ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326');
-            
+
             // 格式化经纬度，保留6位小数
             var longitude = lonLat[0].toFixed(6);
             var latitude = lonLat[1].toFixed(6);
-            
+
             // 显示弹窗
             alert('点击位置坐标\n\n经度 (Longitude): ' + longitude + '\n纬度 (Latitude): ' + latitude);
         });
 
-        // --- 5. 放大镜（地图裁剪）效果 ---
+        // 地图裁剪效果
         const container = document.getElementById('map');
         var mousePosition = null;
         var radius = 75; // 圆形裁剪半径
@@ -233,8 +309,6 @@
             map.render();
         });
 
-        // 在渲染层之前做剪裁
-        // !! 注意: OpenLayers 6 开始 precompose 已经被重命名为 prerender !!
         esriImageryLayer.on('prerender', function (event) {
             if (!spyglassMode) return;
 
@@ -245,7 +319,7 @@
 
             ctx.save();
             ctx.beginPath();
-            
+
             // 绘制覆盖整个画布的外层矩形（顺时针方向）
             ctx.moveTo(0, 0);
             ctx.lineTo(width, 0);
@@ -262,7 +336,7 @@
                 ctx.arc(x, y, r, 0, 2 * Math.PI, true);
                 ctx.closePath();
             }
-            
+
             // 使用非零环绕规则进行裁剪，保留矩形内部、圆圈外部的区域（即挖空圆）
             ctx.clip();
         });
@@ -272,7 +346,7 @@
             if (!spyglassMode) return;
             var ctx = event.context;
             var pixelRatio = event.frameState.pixelRatio;
-            
+
             ctx.restore(); // 恢复到 clip 之前的状态
 
             // 恢复裁剪区域后，再在最顶层绘制探照灯的半透明圆形边框
@@ -296,10 +370,255 @@
             map.getView().animate({
                 center: beijing,           // 目标中心坐标
                 zoom: 12,                  // 目标缩放级别
-                duration: 1000,            // 动画时长（毫秒）
+                duration: 1000,            // 动画时长
                 easing: ol.easing.elastic   // 弹性缓动效果
             });
         });
+        var sketch;
+        /**
+         * 帮助提示框对象（The help tooltip element.）
+         * @type {Element}
+         */
+        var helpTooltipElement;
+        /**
+         *帮助提示框显示的信息（Overlay to show the help messages.）
+         * @type {ol.Overlay}
+         */
+        var helpTooltip;
+        /**
+         * 测量工具提示框对象（The measure tooltip element. ）
+         * @type {Element}
+         */
+        var measureTooltipElement;
+        /**
+         *测量工具中显示的测量值（Overlay to show the measurement.）
+         * @type {ol.Overlay}
+         */
+        var measureTooltip;
+        /**
+         *  当用户正在绘制多边形时的提示信息文本
+         * @type {string}
+         */
+        var continuePolygonMsg = '单击继续绘制，双击结束';
+        /**
+         * 当用户正在绘制线时的提示信息文本
+         * @type {string}
+         */
+        var continueLineMsg = '单击继续绘制，双击结束';
+
+        // --- 7. 添加测量功能 ---
+        // 用于绘制图形的矢量图层
+        var source = new ol.source.Vector();
+        var vector = new ol.layer.Vector({
+            source: source,
+            style: new ol.style.Style({
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 255, 255, 0.2)'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#ffcc33',
+                    width: 2
+                }),
+                image: new ol.style.Circle({
+                    radius: 7,
+                    fill: new ol.style.Fill({
+                        color: '#ffcc33'
+                    })
+                })
+            })
+        });
+        map.addLayer(vector);
+
+        // 鼠标移动事件处理，用于更新提示框的位置和内容
+        var pointerMoveHandler = function (evt) {
+            if (evt.dragging) {
+                return;
+            }
+            var helpMsg = '单击地图起点开始测量';
+
+            if (sketch) {
+                var geom = sketch.getGeometry();
+                if (geom instanceof ol.geom.Polygon) {
+                    helpMsg = continuePolygonMsg;
+                } else if (geom instanceof ol.geom.LineString) {
+                    helpMsg = continueLineMsg;
+                }
+            }
+
+            helpTooltipElement.innerHTML = helpMsg;
+            helpTooltip.setPosition(evt.coordinate);
+            helpTooltipElement.classList.remove('hidden');
+        };
+
+        map.on('pointermove', pointerMoveHandler);
+        map.getViewport().addEventListener('mouseout', function () {
+            helpTooltipElement.classList.add('hidden');
+        });
+
+        // 格式化长度
+        var formatLength = function (line) {
+            var length = ol.sphere.getLength(line);
+            var output;
+            if (length > 100) {
+                output = (Math.round(length / 1000 * 100) / 100) + ' ' + 'km';
+            } else {
+                output = (Math.round(length * 100) / 100) + ' ' + 'm';
+            }
+            return output;
+        };
+
+        // 格式化面积
+        var formatArea = function (polygon) {
+            var area = ol.sphere.getArea(polygon);
+            var output;
+            if (area > 10000) {
+                output = (Math.round(area / 1000000 * 100) / 100) + ' ' + 'km<sup>2</sup>';
+            } else {
+                output = (Math.round(area * 100) / 100) + ' ' + 'm<sup>2</sup>';
+            }
+            return output;
+        };
+
+        // 创建帮助信息提示框
+        function createHelpTooltip() {
+            if (helpTooltipElement) {
+                helpTooltipElement.parentNode.removeChild(helpTooltipElement);
+            }
+            helpTooltipElement = document.createElement('div');
+            helpTooltipElement.className = 'tooltip hidden';
+            helpTooltip = new ol.Overlay({
+                element: helpTooltipElement,
+                offset: [15, 0],
+                positioning: 'center-left'
+            });
+            map.addOverlay(helpTooltip);
+        }
+
+        // 创建测量工具提示框
+        function createMeasureTooltip() {
+            if (measureTooltipElement) {
+                measureTooltipElement.parentNode.removeChild(measureTooltipElement);
+            }
+            measureTooltipElement = document.createElement('div');
+            measureTooltipElement.className = 'tooltip tooltip-measure';
+            measureTooltip = new ol.Overlay({
+                element: measureTooltipElement,
+                offset: [0, -15],
+                positioning: 'bottom-center',
+                stopEvent: false,
+                insertFirst: false
+            });
+            map.addOverlay(measureTooltip);
+        }
+
+        var typeSelect = document.getElementById('type');
+        var draw; // global so we can remove it later
+
+        function addInteraction() {
+            var value = typeSelect.value;
+            if (value === 'none') {
+                return;
+            }
+            var type = (value === 'Area' ? 'Polygon' : 'LineString');
+            draw = new ol.interaction.Draw({
+                source: source,
+                type: type,
+                style: new ol.style.Style({
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 255, 255, 0.2)'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: 'rgba(0, 0, 0, 0.5)',
+                        lineDash: [10, 10],
+                        width: 2
+                    }),
+                    image: new ol.style.Circle({
+                        radius: 5,
+                        stroke: new ol.style.Stroke({
+                            color: 'rgba(0, 0, 0, 0.7)'
+                        }),
+                        fill: new ol.style.Fill({
+                            color: 'rgba(255, 255, 255, 0.2)'
+                        })
+                    })
+                })
+            });
+            map.addInteraction(draw);
+
+            createMeasureTooltip();
+            createHelpTooltip();
+
+            var listener;
+
+            // 为交互式图形绘制控件对象绑定 drawstart 事件
+            draw.on('drawstart',
+                function (evt) {
+                    sketch = evt.feature; // 绘图要素
+                    var tooltipCoord = evt.coordinate; // 绘制的坐标
+
+                    // 绑定 change 事件, 根据绘制几何图形类型得到测量的距离或面积, 并将其显示
+                    listener = sketch.getGeometry().on('change', function (evt) {
+                        var geom = evt.target; // 绘制的几何图形
+                        var output;
+                        if (geom instanceof ol.geom.Polygon) {
+                            // 输出面积值
+                            output = formatArea(/** @type {ol.geom.Polygon} */(geom));
+                            tooltipCoord = geom.getInteriorPoint().getCoordinates(); // 坐标
+                        } else if (geom instanceof ol.geom.LineString) {
+                            // 输出距离值
+                            output = formatLength(/** @type {ol.geom.LineString} */(geom));
+                            tooltipCoord = geom.getLastCoordinate(); // 坐标
+                        }
+                        // 将测量值添加到测量工具提示框中显示
+                        measureTooltipElement.innerHTML = output;
+                        // 设置测量工具提示框的显示位置
+                        measureTooltip.setPosition(tooltipCoord);
+                    });
+                }, this);
+
+            // 为交互式图形绘制控件对象绑定 drawend 事件
+            draw.on('drawend',
+                function (evt) {
+                    // 设置测量工具提示框的样式
+                    measureTooltipElement.className = 'tooltip tooltip-static';
+                    measureTooltip.setOffset([0, -7]);
+                    sketch = null; // 置空当前绘图要素对象
+                    measureTooltipElement = null; // 置空测量工具提示框对象
+                    createMeasureTooltip(); // 重新创建一个测量工具提示框来显示结果
+                    ol.Observable.unByKey(listener);
+                }, this);
+        }
+
+        // 当发生选框改变时重新添加绘制交互
+        typeSelect.onchange = function () {
+            map.removeInteraction(draw);
+            // 切换工具时隐藏悬浮提示框
+            if (helpTooltipElement) {
+                helpTooltipElement.classList.add('hidden');
+            }
+            addInteraction();
+        };
+
+        // 清除按钮功能：清空矢量层并移除之前绘制的所有测量提示框
+        document.getElementById('clearBtn').addEventListener('click', function() {
+            source.clear(); // 清空绘制的线和面
+            
+            // 找到所有固定的结果提示框并删除
+            var staticTooltips = document.querySelectorAll('.tooltip-static');
+            staticTooltips.forEach(function(tooltip) {
+                tooltip.parentNode.removeChild(tooltip);
+            });
+            
+            // 如果有正在测量悬空的未结束标签，也清空内部文字
+            if (measureTooltipElement) {
+                 measureTooltipElement.innerHTML = '';
+            }
+        });
+
+        // 初始化加载交互
+        addInteraction();
+
     </script>
 </body>
+
 </html>
