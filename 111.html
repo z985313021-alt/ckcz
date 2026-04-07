@@ -133,7 +133,8 @@
         .button {
             position: absolute;
             top: 15px;
-            right: 250px; /* 从 60px 改为 250px，避开右上角的鹰眼地图 */
+            right: 250px;
+            /* 从 60px 改为 250px，避开右上角的鹰眼地图 */
             z-index: 1000;
             background-color: #28a745;
             color: white;
@@ -175,7 +176,16 @@
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
                     value="imagery"> 默认：遥感影像 (ESRI)</label><br>
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
+                    value="baidu"> 百度地图 (Baidu)</label><br>
+            <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
                     value="spyglass"> 裁剪：探照灯模式</label>
+            <hr style="margin: 8px 0; border: 0; border-top: 1px solid #ccc;">
+            <label style="cursor:pointer; display:inline-block;"><input type="checkbox" id="kmlToggle" checked> 2012地震数据
+                (KML)</label><br>
+            <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="checkbox" id="gpxToggle"
+                    checked> GPS轨迹 (GPX)</label><br>
+            <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="checkbox"
+                    id="geojsonToggle" checked> 临沂市边界 (GeoJSON)</label>
         </div>
         <div class="button" id="spin">旋转定位到北京</div>
     </div>
@@ -194,6 +204,38 @@
         // OSM 矢量底图 (OpenStreetMap)
         const osmLayer = new ol.layer.Tile({
             source: new ol.source.OSM()
+        });
+
+
+        var baiduResolutions = [];
+        for (var i = 0; i < 19; i++) {
+            baiduResolutions[i] = Math.pow(2, 18 - i);
+        }
+        var baiduTileGrid = new ol.tilegrid.TileGrid({
+            origin: [0, 0], // 百度地图的瓦片原点是 0, 0
+            resolutions: baiduResolutions
+        });
+
+        const baiduLayer = new ol.layer.Tile({
+            source: new ol.source.TileImage({
+                projection: 'EPSG:3857',
+                tileGrid: baiduTileGrid,
+                tileUrlFunction: function (tileCoord) {
+                    if (!tileCoord) return "";
+                    var z = tileCoord[0];
+                    var x = tileCoord[1];
+                    // OpenLayers 的 Y 轴向下递增，而百度地图 Y 轴向上递增，需要进行翻转并且减 1
+                    var y = -tileCoord[2] - 1;
+
+                    // 百度坐标系瓦片针对负数要求使用 'M' 前缀替代 '-'
+                    var xStr = x < 0 ? 'M' + (-x) : x;
+                    var yStr = y < 0 ? 'M' + (-y) : y;
+
+                    // 使用可用的百度地图瓦片接口
+                    return 'http://maponline0.bdimg.com/tile/?qt=vtile&x=' + xStr + '&y=' + yStr + '&z=' + z + '&styles=pl';
+                }
+            }),
+            visible: false // 默认隐藏，通过控件切换
         });
 
         // ESRI 遥感影像底图 (ArcGIS World Imagery)
@@ -237,7 +279,7 @@
                 mousePositionControl,
                 overviewMapControl
             ]),
-            layers: [osmLayer, esriImageryLayer],
+            layers: [osmLayer, esriImageryLayer, baiduLayer],
             view: new ol.View({
                 center: ol.proj.fromLonLat([116.3974, 39.9093]), // 北京中心
                 zoom: 10
@@ -247,6 +289,57 @@
         // 北京坐标（经纬度）
         var beijing = ol.proj.fromLonLat([116.3974, 39.9093]);
 
+        // --- 数据图层加载 ---
+        const kmlLayer = new ol.layer.Vector({
+            source: new ol.source.Vector({
+                url: '2012_Earthquakes_Mag5.kml',
+                format: new ol.format.KML({ extractStyles: true })
+            })
+        });
+
+        const gpxLayer = new ol.layer.Vector({
+            source: new ol.source.Vector({
+                url: 'fells_loop.gpx',
+                format: new ol.format.GPX()
+            }),
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: '#ff0000',
+                    width: 3
+                })
+            })
+        });
+
+        const geojsonLayer = new ol.layer.Vector({
+            source: new ol.source.Vector({
+                url: '临沂市.geojson',
+                format: new ol.format.GeoJSON()
+            }),
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: '#0000ff',
+                    width: 2
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(0, 0, 255, 0.1)'
+                })
+            })
+        });
+
+        map.addLayer(kmlLayer);
+        map.addLayer(gpxLayer);
+        map.addLayer(geojsonLayer);
+
+        document.getElementById('kmlToggle').addEventListener('change', function (e) {
+            kmlLayer.setVisible(e.target.checked);
+        });
+        document.getElementById('gpxToggle').addEventListener('change', function (e) {
+            gpxLayer.setVisible(e.target.checked);
+        });
+        document.getElementById('geojsonToggle').addEventListener('change', function (e) {
+            geojsonLayer.setVisible(e.target.checked);
+        });
+
         // --- 4. 监听图层切换 ---
         document.querySelectorAll('input[name="baseLayer"]').forEach(function (radio) {
             radio.addEventListener('change', function (e) {
@@ -254,17 +347,26 @@
                     spyglassMode = false;
                     osmLayer.setVisible(true);
                     esriImageryLayer.setVisible(false);
+                    baiduLayer.setVisible(false);
                     map.render();
                 } else if (e.target.value === 'imagery') {
                     spyglassMode = false;
                     osmLayer.setVisible(false);
                     esriImageryLayer.setVisible(true);
+                    baiduLayer.setVisible(false);
+                    map.render();
+                } else if (e.target.value === 'baidu') {
+                    spyglassMode = false;
+                    osmLayer.setVisible(false);
+                    esriImageryLayer.setVisible(false);
+                    baiduLayer.setVisible(true);
                     map.render();
                 } else if (e.target.value === 'spyglass') {
                     spyglassMode = true;
                     // 在探照灯模式下：底部渲染矢量，表面渲染影像（被剪裁）
                     osmLayer.setVisible(true);
                     esriImageryLayer.setVisible(true);
+                    baiduLayer.setVisible(false);
                     map.render();
                 }
             });
@@ -276,7 +378,7 @@
             if (document.getElementById('type').value !== 'none') {
                 return;
             }
-            
+
             // 获取点击位置的像素坐标
             var coordinate = map.getEventCoordinate(event.originalEvent);
 
@@ -600,18 +702,18 @@
         };
 
         // 清除按钮功能：清空矢量层并移除之前绘制的所有测量提示框
-        document.getElementById('clearBtn').addEventListener('click', function() {
+        document.getElementById('clearBtn').addEventListener('click', function () {
             source.clear(); // 清空绘制的线和面
-            
+
             // 找到所有固定的结果提示框并删除
             var staticTooltips = document.querySelectorAll('.tooltip-static');
-            staticTooltips.forEach(function(tooltip) {
+            staticTooltips.forEach(function (tooltip) {
                 tooltip.parentNode.removeChild(tooltip);
             });
-            
+
             // 如果有正在测量悬空的未结束标签，也清空内部文字
             if (measureTooltipElement) {
-                 measureTooltipElement.innerHTML = '';
+                measureTooltipElement.innerHTML = '';
             }
         });
 
