@@ -178,6 +178,8 @@
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
                     value="baidu"> 百度地图 (Baidu)</label><br>
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
+                    value="gaode"> 高德地图 (Gaode)</label><br>
+            <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
                     value="spyglass"> 裁剪：探照灯模式</label>
             <hr style="margin: 8px 0; border: 0; border-top: 1px solid #ccc;">
             <label style="cursor:pointer; display:inline-block;"><input type="checkbox" id="kmlToggle" checked> 2012地震数据
@@ -237,6 +239,14 @@
             }),
             visible: false // 默认隐藏，通过控件切换
         });
+        var gaodeMapLayer = new ol.layer.Tile({
+            title: "高德地图",
+            source: new ol.source.XYZ({
+                url: 'http://wprd01.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&style=6',
+            }),
+            visible: false // 默认隐藏
+        });
+
 
         // ESRI 遥感影像底图 (ArcGIS World Imagery)
         const esriImageryLayer = new ol.layer.Tile({
@@ -279,7 +289,7 @@
                 mousePositionControl,
                 overviewMapControl
             ]),
-            layers: [osmLayer, esriImageryLayer, baiduLayer],
+            layers: [osmLayer, esriImageryLayer, baiduLayer, gaodeMapLayer],
             view: new ol.View({
                 center: ol.proj.fromLonLat([116.3974, 39.9093]), // 北京中心
                 zoom: 10
@@ -348,18 +358,28 @@
                     osmLayer.setVisible(true);
                     esriImageryLayer.setVisible(false);
                     baiduLayer.setVisible(false);
+                    gaodeMapLayer.setVisible(false);
                     map.render();
                 } else if (e.target.value === 'imagery') {
                     spyglassMode = false;
                     osmLayer.setVisible(false);
                     esriImageryLayer.setVisible(true);
                     baiduLayer.setVisible(false);
+                    gaodeMapLayer.setVisible(false);
                     map.render();
                 } else if (e.target.value === 'baidu') {
                     spyglassMode = false;
                     osmLayer.setVisible(false);
                     esriImageryLayer.setVisible(false);
                     baiduLayer.setVisible(true);
+                    gaodeMapLayer.setVisible(false);
+                    map.render();
+                } else if (e.target.value === 'gaode') {
+                    spyglassMode = false;
+                    osmLayer.setVisible(false);
+                    esriImageryLayer.setVisible(false);
+                    baiduLayer.setVisible(false);
+                    gaodeMapLayer.setVisible(true);
                     map.render();
                 } else if (e.target.value === 'spyglass') {
                     spyglassMode = true;
@@ -367,6 +387,7 @@
                     osmLayer.setVisible(true);
                     esriImageryLayer.setVisible(true);
                     baiduLayer.setVisible(false);
+                    gaodeMapLayer.setVisible(false);
                     map.render();
                 }
             });
