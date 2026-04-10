@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenLayers 整合：坐标显示 + 鹰眼功能</title>
+    <title>OpenLayers 整合</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css" type="text/css">
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
 
@@ -15,12 +15,29 @@
             position: absolute;
         }
 
+        /*测量菜单的样式信息*/
         #menu {
             float: left;
             position: absolute;
-            bottom: 10px;
-            left: 10px;
+            bottom: 15px;
+            left: 15px;
             z-index: 2000;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px;
+            border-radius: 4px;
+        }
+
+        /**
+        * 编辑菜单的样式信息
+        */
+        #edit-menu {
+            position: absolute;
+            bottom: 60px;
+            left: 15px;
+            z-index: 2000;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px;
+            border-radius: 4px;
         }
 
         .checkbox {
@@ -191,6 +208,18 @@
         </div>
         <div class="button" id="spin">旋转定位到北京</div>
     </div>
+
+    <div id="edit-menu">
+        <label for="edit-type">地图编辑：</label>
+        <select id="edit-type">
+            <option value="none">无</option>
+            <option value="Point">绘制点</option>
+            <option value="LineString">绘制线</option>
+            <option value="Polygon">绘制面</option>
+            <option value="Circle">绘制圆</option>
+            <option value="Select">选择要素</option>
+        </select>
+    </div>
     <div id="menu">
         <label for="type">测量工具：</label>
         <select id="type">
@@ -295,6 +324,7 @@
                 zoom: 10
             })
         });
+
 
         // 北京坐标（经纬度）
         var beijing = ol.proj.fromLonLat([116.3974, 39.9093]);
