@@ -217,8 +217,12 @@
             <option value="LineString">绘制线</option>
             <option value="Polygon">绘制面</option>
             <option value="Circle">绘制圆</option>
-            <option value="Select">选择要素</option>
+            <option value="Modify">修改要素</option>
         </select>
+        <button id="deleteEditBtn" style="margin-left: 5px; padding: 2px 6px;">删除要素</button>
+        <button id="clearEditBtn" style="margin-left: 5px; padding: 2px 6px;">清空全部</button>
+        <button id="exportAllBtn" style="margin-left: 5px; padding: 2px 6px;">导出全部</button>
+        <button id="exportSelectedBtn" style="margin-left: 5px; padding: 2px 6px;">导出选中</button>
     </div>
     <div id="menu">
         <label for="type">测量工具：</label>
@@ -425,8 +429,9 @@
 
         // --- 4.5 监听地图点击事件，显示经纬度弹窗 ---
         map.on('click', function (event) {
-            // 如果当前启用了测量绘图工具，则不触发坐标弹窗，避免冲突
-            if (document.getElementById('type').value !== 'none') {
+            // 如果当前启用了测量绘图工具或地图编辑工具，则不触发坐标弹窗，避免冲突
+            if (document.getElementById('type').value !== 'none' ||
+                document.getElementById('edit-type').value !== 'none') {
                 return;
             }
 
@@ -552,12 +557,12 @@
          *  当用户正在绘制多边形时的提示信息文本
          * @type {string}
          */
-        var continuePolygonMsg = '单击继续绘制，双击结束';
+        var continuePolygonMsg = '单击继续绘制，右键结束';
         /**
          * 当用户正在绘制线时的提示信息文本
          * @type {string}
          */
-        var continueLineMsg = '单击继续绘制，双击结束';
+        var continueLineMsg = '单击继续绘制，右键结束';
 
         // --- 7. 添加测量功能 ---
         // 用于绘制图形的矢量图层
@@ -768,8 +773,177 @@
             }
         });
 
-        // 初始化加载交互
-        addInteraction();
+        // --- 8. 添加地图编辑功能 ---
+        var editSource = new ol.source.Vector();
+        var editLayer = new ol.layer.Vector({
+            source: editSource,
+            style: new ol.style.Style({
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 0, 0, 0.2)'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#ff0000',
+                    width: 2
+                }),
+                image: new ol.style.Circle({
+                    radius: 7,
+                    fill: new ol.style.Fill({
+                        color: '#ff0000'
+                    })
+                })
+            })
+        });
+        map.addLayer(editLayer);
+
+        var editTypeSelect = document.getElementById('edit-type');
+        var drawEdit, modifyEdit, snapEdit, selectEdit;
+
+        // 初始化选择要素交互，用于删除单个要素
+        selectEdit = new ol.interaction.Select({
+            layers: [editLayer]
+        });
+        map.addInteraction(selectEdit);
+
+        function addEditInteraction() {
+            var value = editTypeSelect.value;
+            if (value === 'none') return;
+
+            if (value === 'Modify') {
+                modifyEdit = new ol.interaction.Modify({ source: editSource });
+                map.addInteraction(modifyEdit);
+            } else {
+                drawEdit = new ol.interaction.Draw({
+                    source: editSource,
+                    type: value
+                });
+                map.addInteraction(drawEdit);
+            }
+
+            // 添加吸附交互，使编辑更精准
+            snapEdit = new ol.interaction.Snap({ source: editSource });
+            map.addInteraction(snapEdit);
+        }
+
+        // Ctrl+Z 撤回上一个点
+        window.addEventListener('keydown', function (event) {
+            // 支持 Ctrl+Z 或 Cmd+Z (Mac)
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+                var handled = false;
+                // 优先撤回地图编辑中的点
+                if (drawEdit) {
+                    drawEdit.removeLastPoint();
+                    handled = true;
+                }
+                // 如果编辑工具没在绘图，尝试撤回测量工具的点
+                if (!handled && draw) {
+                    draw.removeLastPoint();
+                    handled = true;
+                }
+
+                if (handled) {
+                    event.preventDefault(); // 阻止浏览器默认撤销行为
+                }
+            }
+        });
+
+        // 删除选中的单个要素按钮
+        document.getElementById('deleteEditBtn').onclick = function () {
+            var selectedFeatures = selectEdit.getFeatures();
+            if (selectedFeatures.getLength() > 0) {
+                if (confirm('确定要删除选中的要素吗？')) {
+                    selectedFeatures.forEach(function (feature) {
+                        editSource.removeFeature(feature);
+                    });
+                    selectedFeatures.clear(); // 清空选择集
+                }
+            } else {
+                alert('请先使用鼠标，选择图层编辑后，再点击选中一个红色的图形，最后点击删除');
+            }
+        };
+
+        // 监听编辑菜单切换
+        editTypeSelect.onchange = function () {
+            // 切换编辑工具前，先停下测量工具
+            typeSelect.value = 'none';
+            map.removeInteraction(draw);
+            if (helpTooltipElement) helpTooltipElement.classList.add('hidden');
+
+
+            map.removeInteraction(drawEdit);
+            map.removeInteraction(modifyEdit);
+            map.removeInteraction(snapEdit);
+
+            // 如果选择了绘图模式，暂时停用选择器，避免点击干扰
+            if (editTypeSelect.value !== 'none' && editTypeSelect.value !== 'Modify') {
+                selectEdit.setActive(false);
+            } else {
+                selectEdit.setActive(true);
+            }
+
+            addEditInteraction();
+        };
+
+        // 修改测量菜单切换逻辑：切换测量时停下编辑工具
+        var originalMeasurementChange = typeSelect.onchange;
+        typeSelect.onchange = function () {
+            // 停下编辑工具
+            editTypeSelect.value = 'none';
+            map.removeInteraction(drawEdit);
+            map.removeInteraction(modifyEdit);
+            map.removeInteraction(snapEdit);
+            selectEdit.setActive(false);
+
+            // 执行原有的测量逻辑
+            originalMeasurementChange.call(this);
+        };
+
+        // 清空绘图按钮
+        document.getElementById('clearEditBtn').onclick = function () {
+            if (confirm('确定要删除所有的图形吗？')) editSource.clear();
+            selectEdit.getFeatures().clear();
+        };
+
+
+        //导出要素为 GeoJSON 并下载
+
+        function downloadGeoJSON(features, filename) {
+            if (features.length === 0) {
+                alert('没有可导出的数据！');
+                return;
+            }
+            var format = new ol.format.GeoJSON();
+            var geojsonStr = format.writeFeatures(features, {
+                dataProjection: 'EPSG:4326',
+                featureProjection: 'EPSG:3857'
+            });
+            var blob = new Blob([geojsonStr], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 导出全部按钮
+        document.getElementById('exportAllBtn').onclick = function () {
+            var features = editSource.getFeatures();
+            downloadGeoJSON(features, 'features_all.geojson');
+        };
+
+        // 导出选中按钮
+        document.getElementById('exportSelectedBtn').onclick = function () {
+            var features = selectEdit.getFeatures().getArray();
+            if (features.length === 0) {
+                alert('请先选中要导出的要素！');
+                return;
+            }
+            downloadGeoJSON(features, 'features_selected.geojson');
+        };
+
+
+
+
 
     </script>
 </body>
