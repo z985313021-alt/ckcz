@@ -179,6 +179,93 @@
         .hidden {
             display: none;
         }
+
+        /* 自定义弹窗样式 */
+        #custom-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #custom-modal-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .custom-modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            width: 380px;
+            max-width: 90%;
+            transform: scale(0.8);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+
+        #custom-modal-overlay.show .custom-modal-content {
+            transform: scale(1);
+        }
+
+        .custom-modal-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #1a1a1a;
+        }
+
+        .custom-modal-body {
+            font-size: 15px;
+            color: #4a4a4a;
+            line-height: 1.6;
+            margin-bottom: 24px;
+            white-space: pre-wrap;
+        }
+
+        .custom-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .custom-modal-btn {
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .custom-modal-btn-cancel {
+            background: #f5f5f5;
+            color: #666;
+        }
+
+        .custom-modal-btn-cancel:hover {
+            background: #e8e8e8;
+        }
+
+        .custom-modal-btn-confirm {
+            background: #28a745;
+            color: white;
+        }
+
+        .custom-modal-btn-confirm:hover {
+            background: #218838;
+        }
     </style>
 </head>
 
@@ -232,6 +319,18 @@
             <option value="Area">面积</option>
         </select>
         <button id="clearBtn" style="margin-left: 10px; padding: 2px 6px;">清除测量结果</button>
+    </div>
+
+    <!-- 自定义弹窗结构 -->
+    <div id="custom-modal-overlay">
+        <div class="custom-modal-content">
+            <div class="custom-modal-header" id="modal-title">提示</div>
+            <div class="custom-modal-body" id="modal-message">消息内容</div>
+            <div class="custom-modal-footer">
+                <button class="custom-modal-btn custom-modal-btn-cancel" id="modal-cancel-btn">取消</button>
+                <button class="custom-modal-btn custom-modal-btn-confirm" id="modal-confirm-btn">确定</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -446,7 +545,7 @@
             var latitude = lonLat[1].toFixed(6);
 
             // 显示弹窗
-            alert('点击位置坐标\n\n经度 (Longitude): ' + longitude + '\n纬度 (Latitude): ' + latitude);
+            showCustomModal('alert', '点击位置坐标', '经度 (Longitude): ' + longitude + '\n纬度 (Latitude): ' + latitude);
         });
 
         // 地图裁剪效果
@@ -850,14 +949,14 @@
         document.getElementById('deleteEditBtn').onclick = function () {
             var selectedFeatures = selectEdit.getFeatures();
             if (selectedFeatures.getLength() > 0) {
-                if (confirm('确定要删除选中的要素吗？')) {
+                showCustomModal('confirm', '确认删除', '确定要删除选中的要素吗？', function() {
                     selectedFeatures.forEach(function (feature) {
                         editSource.removeFeature(feature);
                     });
                     selectedFeatures.clear(); // 清空选择集
-                }
+                });
             } else {
-                alert('请先使用鼠标，选择图层编辑后，再点击选中一个红色的图形，最后点击删除');
+                showCustomModal('alert', '提示', '请先使用鼠标，选择图层编辑后，再点击选中一个红色的图形，最后点击删除');
             }
         };
 
@@ -899,16 +998,73 @@
 
         // 清空绘图按钮
         document.getElementById('clearEditBtn').onclick = function () {
-            if (confirm('确定要删除所有的图形吗？')) editSource.clear();
-            selectEdit.getFeatures().clear();
+            showCustomModal('confirm', '确认清空', '确定要删除所有的图形吗？', function() {
+                editSource.clear();
+                selectEdit.getFeatures().clear();
+            });
         };
+        
+        /**
+         * 显示自定义弹窗
+         * @param {string} type 'alert' | 'confirm'
+         * @param {string} title 
+         * @param {string} message 
+         * @param {function} onConfirm 
+         */
+        function showCustomModal(type, title, message, onConfirm) {
+            const overlay = document.getElementById('custom-modal-overlay');
+            const titleEl = document.getElementById('modal-title');
+            const messageEl = document.getElementById('modal-message');
+            const cancelBtn = document.getElementById('modal-cancel-btn');
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            
+            if (type === 'alert') {
+                cancelBtn.style.display = 'none';
+            } else {
+                cancelBtn.style.display = 'block';
+            }
+
+            const hideModal = () => {
+                overlay.classList.remove('show');
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 300);
+            };
+
+            const handleConfirm = () => {
+                hideModal();
+                if (onConfirm) onConfirm();
+                cleanup();
+            };
+
+            const handleCancel = () => {
+                hideModal();
+                cleanup();
+            };
+
+            const cleanup = () => {
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+            };
+
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', handleCancel);
+
+            overlay.style.display = 'flex';
+            setTimeout(() => {
+                overlay.classList.add('show');
+            }, 10);
+        }
 
 
         //导出要素为 GeoJSON 并下载
 
         function downloadGeoJSON(features, filename) {
             if (features.length === 0) {
-                alert('没有可导出的数据！');
+                showCustomModal('alert', '提示', '没有可导出的数据！');
                 return;
             }
             var format = new ol.format.GeoJSON();
@@ -935,7 +1091,7 @@
         document.getElementById('exportSelectedBtn').onclick = function () {
             var features = selectEdit.getFeatures().getArray();
             if (features.length === 0) {
-                alert('请先选中要导出的要素！');
+                showCustomModal('alert', '提示', '请先选中要导出的要素！');
                 return;
             }
             downloadGeoJSON(features, 'features_selected.geojson');
