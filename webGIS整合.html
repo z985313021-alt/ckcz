@@ -284,6 +284,10 @@
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
                     value="gaode"> 高德地图 (Gaode)</label><br>
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
+                    value="tianditu"> 天地图 (WMTS)</label><br>
+            <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
+                    value="wms"> WMS 示例 (States)</label><br>
+            <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="radio" name="baseLayer"
                     value="spyglass"> 裁剪：探照灯模式</label>
             <hr style="margin: 8px 0; border: 0; border-top: 1px solid #ccc;">
             <label style="cursor:pointer; display:inline-block;"><input type="checkbox" id="kmlToggle" checked> 2012地震数据
@@ -379,6 +383,66 @@
             visible: false // 默认隐藏
         });
 
+        // --- WMTS 图层 (天地图示例) ---
+        var projection = ol.proj.get('EPSG:4326');
+        var projectionExtent = projection.getExtent();
+        var size = ol.extent.getWidth(projectionExtent) / 256;
+        var resolutions = new Array(19);
+        var matrixIds = new Array(19);
+        for (var z = 0; z < 19; ++z) {
+            resolutions[z] = size / Math.pow(2, z);
+            matrixIds[z] = z;
+        }
+
+        const tiandituKey = '2fef1878e03f9409dd209da184a774fb'; // 请在此处替换您的天地图密钥
+        const tiandituLayer = new ol.layer.Group({
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.WMTS({
+                        url: 'http://t0.tianditu.gov.cn/vec_c/wmts?tk=' + tiandituKey,
+                        layer: 'vec',
+                        matrixSet: 'c',
+                        format: 'tiles',
+                        projection: projection,
+                        tileGrid: new ol.tilegrid.WMTS({
+                            origin: ol.extent.getTopLeft(projectionExtent),
+                            resolutions: resolutions,
+                            matrixIds: matrixIds
+                        }),
+                        style: 'default',
+                        wrapX: true
+                    })
+                }),
+                new ol.layer.Tile({
+                    source: new ol.source.WMTS({
+                        url: 'http://t0.tianditu.gov.cn/cva_c/wmts?tk=' + tiandituKey,
+                        layer: 'cva',
+                        matrixSet: 'c',
+                        format: 'tiles',
+                        projection: projection,
+                        tileGrid: new ol.tilegrid.WMTS({
+                            origin: ol.extent.getTopLeft(projectionExtent),
+                            resolutions: resolutions,
+                            matrixIds: matrixIds
+                        }),
+                        style: 'default',
+                        wrapX: true
+                    })
+                })
+            ],
+            visible: false
+        });
+
+        // --- WMS 图层 (GeoServer 示例) ---
+        const wmsLayer = new ol.layer.Tile({
+            source: new ol.source.TileWMS({
+                url: 'https://ahocevar.com/geoserver/wms',
+                params: { 'LAYERS': 'topp:states', 'TILED': true },
+                serverType: 'geoserver',
+            }),
+            visible: false
+        });
+
 
         // ESRI 遥感影像底图 (ArcGIS World Imagery)
         const esriImageryLayer = new ol.layer.Tile({
@@ -421,7 +485,7 @@
                 mousePositionControl,
                 overviewMapControl
             ]),
-            layers: [osmLayer, esriImageryLayer, baiduLayer, gaodeMapLayer],
+            layers: [osmLayer, esriImageryLayer, baiduLayer, gaodeMapLayer, tiandituLayer, wmsLayer],
             view: new ol.View({
                 center: ol.proj.fromLonLat([116.3974, 39.9093]), // 北京中心
                 zoom: 10
@@ -513,6 +577,26 @@
                     esriImageryLayer.setVisible(false);
                     baiduLayer.setVisible(false);
                     gaodeMapLayer.setVisible(true);
+                    tiandituLayer.setVisible(false);
+                    wmsLayer.setVisible(false);
+                    map.render();
+                } else if (e.target.value === 'tianditu') {
+                    spyglassMode = false;
+                    osmLayer.setVisible(false);
+                    esriImageryLayer.setVisible(false);
+                    baiduLayer.setVisible(false);
+                    gaodeMapLayer.setVisible(false);
+                    tiandituLayer.setVisible(true);
+                    wmsLayer.setVisible(false);
+                    map.render();
+                } else if (e.target.value === 'wms') {
+                    spyglassMode = false;
+                    osmLayer.setVisible(false);
+                    esriImageryLayer.setVisible(false);
+                    baiduLayer.setVisible(false);
+                    gaodeMapLayer.setVisible(false);
+                    tiandituLayer.setVisible(false);
+                    wmsLayer.setVisible(true);
                     map.render();
                 } else if (e.target.value === 'spyglass') {
                     spyglassMode = true;
@@ -521,6 +605,8 @@
                     esriImageryLayer.setVisible(true);
                     baiduLayer.setVisible(false);
                     gaodeMapLayer.setVisible(false);
+                    tiandituLayer.setVisible(false);
+                    wmsLayer.setVisible(false);
                     map.render();
                 }
             });
@@ -949,7 +1035,7 @@
         document.getElementById('deleteEditBtn').onclick = function () {
             var selectedFeatures = selectEdit.getFeatures();
             if (selectedFeatures.getLength() > 0) {
-                showCustomModal('confirm', '确认删除', '确定要删除选中的要素吗？', function() {
+                showCustomModal('confirm', '确认删除', '确定要删除选中的要素吗？', function () {
                     selectedFeatures.forEach(function (feature) {
                         editSource.removeFeature(feature);
                     });
@@ -998,12 +1084,12 @@
 
         // 清空绘图按钮
         document.getElementById('clearEditBtn').onclick = function () {
-            showCustomModal('confirm', '确认清空', '确定要删除所有的图形吗？', function() {
+            showCustomModal('confirm', '确认清空', '确定要删除所有的图形吗？', function () {
                 editSource.clear();
                 selectEdit.getFeatures().clear();
             });
         };
-        
+
         /**
          * 显示自定义弹窗
          * @param {string} type 'alert' | 'confirm'
@@ -1020,7 +1106,7 @@
 
             titleEl.textContent = title;
             messageEl.textContent = message;
-            
+
             if (type === 'alert') {
                 cancelBtn.style.display = 'none';
             } else {
