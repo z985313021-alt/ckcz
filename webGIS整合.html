@@ -27,6 +27,43 @@
             border-radius: 4px;
         }
 
+        .marker {
+            width: 24px;
+            height: 24px;
+            background-image: url('地址.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            cursor: pointer;
+        }
+
+        .address {
+            position: relative;
+            top: -40px;
+            left: -50%;
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'Microsoft YaHei', sans-serif;
+            padding: 4px 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .address::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid rgba(255, 255, 255, 0.95);
+        }
+
         /**
         * 编辑菜单的样式信息
         */
@@ -300,6 +337,10 @@
         <div class="button" id="spin">旋转定位到北京</div>
     </div>
 
+    <!-- 静态标注用的 Overlay 容器 -->
+    <div id="marker" class="marker"></div>
+    <div id="address" class="address"></div>
+
     <div id="edit-menu">
         <label for="edit-type">地图编辑：</label>
         <select id="edit-type">
@@ -556,6 +597,8 @@
                     esriImageryLayer.setVisible(false);
                     baiduLayer.setVisible(false);
                     gaodeMapLayer.setVisible(false);
+                    tiandituLayer.setVisible(false);
+                    wmsLayer.setVisible(false);
                     map.render();
                 } else if (e.target.value === 'imagery') {
                     spyglassMode = false;
@@ -563,6 +606,8 @@
                     esriImageryLayer.setVisible(true);
                     baiduLayer.setVisible(false);
                     gaodeMapLayer.setVisible(false);
+                    tiandituLayer.setVisible(false);
+                    wmsLayer.setVisible(false);
                     map.render();
                 } else if (e.target.value === 'baidu') {
                     spyglassMode = false;
@@ -570,6 +615,8 @@
                     esriImageryLayer.setVisible(false);
                     baiduLayer.setVisible(true);
                     gaodeMapLayer.setVisible(false);
+                    tiandituLayer.setVisible(false);
+                    wmsLayer.setVisible(false);
                     map.render();
                 } else if (e.target.value === 'gaode') {
                     spyglassMode = false;
@@ -1183,9 +1230,73 @@
             downloadGeoJSON(features, 'features_selected.geojson');
         };
 
+        //静态添加标注
+        var beijing = ol.proj.fromLonLat([116.4074, 39.9042]);
+        var wuhan = ol.proj.fromLonLat([114.3053, 30.5928]);
 
+        // createLabelStyle 必须在调用之前定义
+        var createLabelStyle = function (feature) {
+            return new ol.style.Style({
+                image: new ol.style.Icon({
+                    anchor: [0.5, 1],
+                    anchorXUnits: 'fraction',
+                    anchorYUnits: 'fraction',
+                    scale: 0.1,
+                    src: '定位.png'
+                }),
+                text: new ol.style.Text({
+                    textAlign: 'center',
+                    textBaseline: 'bottom',
+                    offsetY: -35,
+                    text: feature.get('name'),
+                    font: 'bold 13px "Microsoft YaHei", sans-serif',
+                    fill: new ol.style.Fill({
+                        color: '#333'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: '#fff',
+                        width: 3
+                    }),
+                    backgroundFill: new ol.style.Fill({
+                        color: 'rgba(255, 255, 255, 0.85)'
+                    }),
+                    backgroundStroke: new ol.style.Stroke({
+                        color: 'rgba(0, 0, 0, 0.15)',
+                        width: 1
+                    }),
+                    padding: [4, 8, 4, 8]
+                })
+            })
+        }
 
+        var iconFeature = new ol.Feature({
+            geometry: new ol.geom.Point(beijing),
+            name: '北京市',
+            population: 2115
+        });
+        iconFeature.setStyle(createLabelStyle(iconFeature));
+        var vectorSource = new ol.source.Vector({
+            features: [iconFeature]
+        });
+        var vectorLayer = new ol.layer.Vector({
+            source: vectorSource
+        });
+        map.addLayer(vectorLayer);
 
+        var marker = new ol.Overlay({
+            position: wuhan,
+            positioning: 'center-center',
+            element: document.getElementById('marker')
+
+        })
+        map.addOverlay(marker);
+        marker.getElement().title = "武汉市";
+        var text = new ol.Overlay({
+            position: wuhan,
+            element: document.getElementById('address')
+        })
+        map.addOverlay(text);
+        text.getElement().innerHTML = marker.getElement().title;
 
     </script>
 </body>
