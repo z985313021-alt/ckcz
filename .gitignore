@@ -1,3 +1,5 @@
 *.geojson
 *.gpx
 *.kml
+*.json
+*.jpg

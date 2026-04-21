@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenLayers 整合</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css" type="text/css">
+    <link rel="stylesheet" href="cards.css" type="text/css">
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
 
     <style>
@@ -303,6 +304,150 @@
         .custom-modal-btn-confirm:hover {
             background: #218838;
         }
+
+        /* Popup 弹窗样式 */
+        .ol-popup {
+            position: absolute;
+            background: white;
+            border-radius: 12px;
+            padding: 0;
+            min-width: 280px;
+            max-width: 340px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+            font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            animation: popupFadeIn 0.25s ease;
+            overflow: hidden;
+        }
+
+        @keyframes popupFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .ol-popup::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 9px solid transparent;
+            border-right: 9px solid transparent;
+            border-top: 9px solid white;
+        }
+
+        .popup-header {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 14px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .popup-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .popup-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .popup-close:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .popup-body {
+            padding: 14px 18px;
+        }
+
+        .popup-tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            margin-bottom: 10px;
+        }
+
+        .popup-info-row {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .popup-info-row span.label {
+            color: #999;
+            flex-shrink: 0;
+        }
+
+        .popup-desc {
+            font-size: 13px;
+            color: #444;
+            line-height: 1.7;
+            margin-top: 10px;
+            border-top: 1px solid #f0f0f0;
+            padding-top: 10px;
+        }
+
+        .popup-img-container {
+            width: 100%;
+            height: 140px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 12px;
+            display: none;
+            /* hidden by default */
+        }
+
+        .popup-img-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        /* 搜索框下拉列表项样式 */
+        .search-result-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .search-result-item:hover {
+            background-color: #f0f0f0;
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 
@@ -334,6 +479,21 @@
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="checkbox"
                     id="geojsonToggle" checked> 临沂市边界 (GeoJSON)</label>
         </div>
+
+        <!-- 搜索框容器 -->
+        <div id="search-container"
+            style="position: absolute; top: 15px; left: 350px; z-index: 1000; display: flex; flex-direction: column;">
+            <div
+                style="background: rgba(255, 255, 255, 0.9); padding: 5px 10px; border-radius: 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px;">
+                <input type="text" id="searchInput" autocomplete="off" placeholder="搜索景点或地区..."
+                    style="padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px;font-size: 14px; width: 220px; outline: none;">
+            </div>
+            <!-- 下拉框 -->
+            <ul id="searchResults"
+                style="display: none; background: white; margin: 5px 0 0 0; border-radius: 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); list-style: none; padding: 0; max-height: 250px; overflow-y: auto;">
+            </ul>
+        </div>
+
         <div class="button" id="spin">旋转定位到北京</div>
     </div>
 
@@ -364,6 +524,24 @@
             <option value="Area">面积</option>
         </select>
         <button id="clearBtn" style="margin-left: 10px; padding: 2px 6px;">清除测量结果</button>
+    </div>
+
+    <!-- Popup 弹窗容器 -->
+    <div id="popup" class="ol-popup">
+        <div class="popup-header">
+            <h3 id="popup-title"></h3>
+            <button class="popup-close" id="popup-closer">×</button>
+        </div>
+        <div class="popup-body">
+            <div class="popup-img-container" id="popup-img-container">
+                <img id="popup-image" src="" alt="景点图片">
+            </div>
+            <span class="popup-tag" id="popup-category"></span>
+            <div class="popup-info-row"><span class="label">📍 地址：</span><span id="popup-address"></span></div>
+            <div class="popup-info-row" id="popup-population-row"><span class="label">👥 人口：</span><span
+                    id="popup-population"></span></div>
+            <div class="popup-desc" id="popup-desc"></div>
+        </div>
     </div>
 
     <!-- 自定义弹窗结构 -->
@@ -528,7 +706,7 @@
             ]),
             layers: [osmLayer, esriImageryLayer, baiduLayer, gaodeMapLayer, tiandituLayer, wmsLayer],
             view: new ol.View({
-                center: ol.proj.fromLonLat([116.3974, 39.9093]), // 北京中心
+                center: ol.proj.fromLonLat([117.8333, 35.5000]), // 北京中心
                 zoom: 10
             })
         });
@@ -667,6 +845,10 @@
                 return;
             }
 
+            // 如果点击到了标注点要素，由 popup 处理，不显示坐标弹窗
+            var hasFeature = map.forEachFeatureAtPixel(event.pixel, function () { return true; });
+            if (hasFeature) return;
+
             // 获取点击位置的像素坐标
             var coordinate = map.getEventCoordinate(event.originalEvent);
 
@@ -758,7 +940,7 @@
         document.getElementById('spin').addEventListener('click', function () {
             // 使用 animate() 方法实现平滑动画过渡
             map.getView().animate({
-                center: beijing,           // 目标中心坐标
+                center: beijing,             // 目标中心坐标
                 zoom: 12,                  // 目标缩放级别
                 duration: 1000,            // 动画时长
                 easing: ol.easing.elastic   // 弹性缓动效果
@@ -1230,11 +1412,9 @@
             downloadGeoJSON(features, 'features_selected.geojson');
         };
 
-        //静态添加标注
-        var beijing = ol.proj.fromLonLat([116.4074, 39.9042]);
-        var wuhan = ol.proj.fromLonLat([114.3053, 30.5928]);
+        // --- 9. 从 markers.json 加载标注点 + Popup 弹窗 ---
 
-        // createLabelStyle 必须在调用之前定义
+        // 创建矢量层标注样式函数
         var createLabelStyle = function (feature) {
             return new ol.style.Style({
                 image: new ol.style.Icon({
@@ -1250,53 +1430,209 @@
                     offsetY: -35,
                     text: feature.get('name'),
                     font: 'bold 13px "Microsoft YaHei", sans-serif',
-                    fill: new ol.style.Fill({
-                        color: '#333'
-                    }),
-                    stroke: new ol.style.Stroke({
-                        color: '#fff',
-                        width: 3
-                    }),
-                    backgroundFill: new ol.style.Fill({
-                        color: 'rgba(255, 255, 255, 0.85)'
-                    }),
-                    backgroundStroke: new ol.style.Stroke({
-                        color: 'rgba(0, 0, 0, 0.15)',
-                        width: 1
-                    }),
+                    fill: new ol.style.Fill({ color: '#333' }),
+                    stroke: new ol.style.Stroke({ color: '#fff', width: 3 }),
+                    backgroundFill: new ol.style.Fill({ color: 'rgba(255, 255, 255, 0.85)' }),
+                    backgroundStroke: new ol.style.Stroke({ color: 'rgba(0, 0, 0, 0.15)', width: 1 }),
                     padding: [4, 8, 4, 8]
                 })
-            })
+            });
+        };
+
+        // 标注点矢量图层
+        var markerSource = new ol.source.Vector();
+        var markerLayer = new ol.layer.Vector({ source: markerSource });
+        map.addLayer(markerLayer);
+
+        // --- Popup Overlay ---
+        var popupEl = document.getElementById('popup');
+        var popupCloser = document.getElementById('popup-closer');
+        var popupOverlay = new ol.Overlay({
+            element: popupEl,
+            autoPan: true,
+            autoPanAnimation: { duration: 250 },
+            positioning: 'bottom-center',
+            offset: [0, -40]
+        });
+        map.addOverlay(popupOverlay);
+
+        // 关闭按钮
+        popupCloser.addEventListener('click', function () {
+            popupOverlay.setPosition(undefined);
+            popupCloser.blur();
+        });
+
+        // 填充 popup 内容
+        function showPopup(coordinate, props) {
+            document.getElementById('popup-title').textContent = props.name;
+            document.getElementById('popup-category').textContent = props.category || '';
+            document.getElementById('popup-address').textContent = props.address || '';
+            document.getElementById('popup-desc').textContent = props.description || '';
+
+            var imgContainer = document.getElementById('popup-img-container');
+            var imgEl = document.getElementById('popup-image');
+            if (props.image && props.image.trim() !== "") {
+                imgEl.src = "images/" + props.image; // Images are in the images/ folder
+                imgContainer.style.display = 'block';
+            } else {
+                imgContainer.style.display = 'none';
+            }
+
+            var popRow = document.getElementById('popup-population-row');
+            if (props.population) {
+                popRow.style.display = 'flex';
+                document.getElementById('popup-population').textContent = props.population;
+            } else {
+                popRow.style.display = 'none';
+            }
+
+            popupOverlay.setPosition(coordinate);
         }
 
-        var iconFeature = new ol.Feature({
-            geometry: new ol.geom.Point(beijing),
-            name: '北京市',
-            population: 2115
-        });
-        iconFeature.setStyle(createLabelStyle(iconFeature));
-        var vectorSource = new ol.source.Vector({
-            features: [iconFeature]
-        });
-        var vectorLayer = new ol.layer.Vector({
-            source: vectorSource
-        });
-        map.addLayer(vectorLayer);
+        // 点击地图上的标注点时显示 popup
+        map.on('singleclick', function (evt) {
+            // 如果测量或编辑工具激活，跳过
+            if (document.getElementById('type').value !== 'none' ||
+                document.getElementById('edit-type').value !== 'none') {
+                return;
+            }
 
-        var marker = new ol.Overlay({
-            position: wuhan,
-            positioning: 'center-center',
-            element: document.getElementById('marker')
+            var feature = map.forEachFeatureAtPixel(evt.pixel, function (f, layer) {
+                // 只识别标注图层上的 feature
+                if (layer === markerLayer) return f;
+            });
 
-        })
-        map.addOverlay(marker);
-        marker.getElement().title = "武汉市";
-        var text = new ol.Overlay({
-            position: wuhan,
-            element: document.getElementById('address')
-        })
-        map.addOverlay(text);
-        text.getElement().innerHTML = marker.getElement().title;
+            if (feature) {
+                var coord = feature.getGeometry().getCoordinates();
+                showPopup(coord, {
+                    name: feature.get('name'),
+                    category: feature.get('category'),
+                    address: feature.get('address'),
+                    description: feature.get('description'),
+                    population: feature.get('population'),
+                    image: feature.get('image')
+                });
+            } else {
+                // 点击空白处关闭 popup
+                popupOverlay.setPosition(undefined);
+            }
+        });
+
+        // 鼠标移到标注点时变为手型
+        map.on('pointermove', function (evt) {
+            if (evt.dragging) return;
+            var hit = map.forEachFeatureAtPixel(evt.pixel, function (f, layer) {
+                return layer === markerLayer;
+            });
+            map.getTargetElement().style.cursor = hit ? 'pointer' : '';
+        });
+
+        // --- 从 markers.json 加载数据 ---
+        fetch('markers.json')
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                data.markers.forEach(function (m) {
+                    var coord = ol.proj.fromLonLat([m.longitude, m.latitude]);
+                    var feature = new ol.Feature({
+                        geometry: new ol.geom.Point(coord),
+                        name: m.name,
+                        category: m.category,
+                        description: m.description,
+                        address: m.address,
+                        population: m.population,
+                        image: m.image
+                    });
+                    feature.setStyle(createLabelStyle(feature));
+                    markerSource.addFeature(feature);
+                });
+            })
+            .catch(function (err) {
+                console.error('加载 markers.json 失败:', err);
+            });
+
+        // --- 10. 搜索景点功能与下拉框 ---
+        var searchInput = document.getElementById('searchInput');
+        var searchResults = document.getElementById('searchResults');
+
+        // 监听输入，实时匹配
+        searchInput.addEventListener('input', function () {
+            var keyword = this.value.trim().toLowerCase();
+            searchResults.innerHTML = '';
+
+            if (!keyword) {
+                searchResults.style.display = 'none';
+                return;
+            }
+
+            var features = markerSource.getFeatures();
+            var matches = [];
+
+            // 简单模糊匹配
+            for (var i = 0; i < features.length; i++) {
+                var name = features[i].get('name') || '';
+                var category = features[i].get('category') || '';
+                var address = features[i].get('address') || '';
+
+                if (name.toLowerCase().includes(keyword) ||
+                    address.toLowerCase().includes(keyword) ||
+                    category.toLowerCase().includes(keyword)) {
+                    matches.push(features[i]);
+                }
+            }
+
+            if (matches.length > 0) {
+                searchResults.style.display = 'block';
+                matches.forEach(function (feature) {
+                    var li = document.createElement('li');
+                    li.className = 'search-result-item';
+                    li.innerHTML = '<strong>' + feature.get('name') + '</strong> <span style="color:#888;font-size:12px;margin-left:8px;">' + (feature.get('category') || '') + '</span>';
+
+                    li.addEventListener('click', function () {
+                        // 选择结果，清空下拉框
+                        searchInput.value = feature.get('name');
+                        searchResults.style.display = 'none';
+
+                        var coord = feature.getGeometry().getCoordinates();
+
+                        // 平滑移动并放大
+                        map.getView().animate({
+                            center: coord,
+                            zoom: 13,
+                            duration: 1000
+                        });
+
+                        setTimeout(function () {
+                            showPopup(coord, {
+                                name: feature.get('name'),
+                                category: feature.get('category'),
+                                address: feature.get('address'),
+                                description: feature.get('description'),
+                                population: feature.get('population'),
+                                image: feature.get('image')
+                            });
+                        }, 1000);
+                    });
+
+                    searchResults.appendChild(li);
+                });
+            } else {
+                searchResults.style.display = 'none';
+            }
+        });
+
+        // 点击页面其他地方隐藏下拉框
+        document.addEventListener('click', function (e) {
+            if (e.target !== searchInput && e.target !== searchResults) {
+                searchResults.style.display = 'none';
+            }
+        });
+
+        // 点击搜索框如果里面有内容，重新显示下拉框
+        searchInput.addEventListener('click', function () {
+            if (this.value.trim() && searchResults.children.length > 0) {
+                searchResults.style.display = 'block';
+            }
+        });
 
     </script>
 </body>
