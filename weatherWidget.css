@@ -1,0 +1,120 @@
+/* =========================================================================
+   天气预报与 24 小时预报组件 (WeatherSystem) 样式表
+   可复用于任何项目
+========================================================================= */
+
+/* 天气小组件样式 */
+.ws-weather-widget {
+    position: absolute;
+    top: 180px; /* 默认位置，可在实际项目中覆盖此样式调整位置 */
+    right: 10px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.85);
+    padding: 12px 18px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 140px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    transition: transform 0.3s ease;
+}
+
+.ws-weather-widget:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.ws-weather-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ws-weather-temp {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+.ws-weather-icon {
+    font-size: 28px;
+}
+
+.ws-weather-info {
+    font-size: 13px;
+    color: #666;
+    display: flex;
+    gap: 8px;
+}
+
+.ws-weather-city {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+/* 和风天气 24 小时预报图表面板 */
+.ws-weather-chart-panel {
+    position: absolute;
+    bottom: 80px; /* 默认位置 */
+    right: 20px;
+    z-index: 1500;
+    width: 580px;
+    height: 380px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    padding: 10px;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+    opacity: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.ws-weather-chart-panel.hidden {
+    transform: translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ws-weather-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 10px 10px 10px;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 10px;
+}
+
+.ws-weather-chart-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #333;
+}
+
+.ws-close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #999;
+    cursor: pointer;
+}
+
+.ws-close-btn:hover {
+    color: #333;
+}
+
+.ws-weather-chart-container {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+}

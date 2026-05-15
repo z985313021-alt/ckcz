@@ -8,6 +8,9 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css" type="text/css">
     <link rel="stylesheet" href="cards.css" type="text/css">
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="weatherWidget.css" type="text/css">
+    <script src="weatherWidget.js"></script>
 
     <style>
         #mapCon {
@@ -448,6 +451,7 @@
         .search-result-item:last-child {
             border-bottom: none;
         }
+
     </style>
 </head>
 
@@ -478,6 +482,25 @@
                     checked> GPS轨迹 (GPX)</label><br>
             <label style="cursor:pointer; margin-top:5px; display:inline-block;"><input type="checkbox"
                     id="geojsonToggle" checked> 临沂市边界 (GeoJSON)</label>
+            <hr style="margin: 8px 0; border: 0; border-top: 1px solid #ccc;">
+            <label
+                style="cursor:pointer; font-weight: bold; color: #d35400; display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="heatmapToggle" checked> 🔥 震源热点图
+            </label>
+            <div id="heatmap-settings" style="padding-left: 20px; margin-top: 8px;">
+                <div
+                    style="font-size: 12px; color: #666; display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span>半径:</span><span id="radius-val" style="color: #667eea; font-weight: bold;">10</span>
+                </div>
+                <input type="range" id="heatmap-radius" min="1" max="50" step="1" value="10"
+                    style="width: 100%; height: 4px; accent-color: #667eea; cursor: pointer;">
+                <div
+                    style="font-size: 12px; color: #666; display: flex; justify-content: space-between; margin-top: 8px; margin-bottom: 2px;">
+                    <span>模糊:</span><span id="blur-val" style="color: #667eea; font-weight: bold;">15</span>
+                </div>
+                <input type="range" id="heatmap-blur" min="1" max="50" step="1" value="15"
+                    style="width: 100%; height: 4px; accent-color: #667eea; cursor: pointer;">
+            </div>
         </div>
 
         <!-- 搜索框容器 -->
@@ -493,8 +516,15 @@
                 style="display: none; background: white; margin: 5px 0 0 0; border-radius: 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); list-style: none; padding: 0; max-height: 250px; overflow-y: auto;">
             </ul>
         </div>
-
+        <div id="mapCon">
+        </div>
         <div class="button" id="spin">旋转定位到北京</div>
+        <div class="button" id="toggleMarkersBtn" style="right: 400px; background-color: #007bff;">隐藏标注</div>
+        <div class="button" id="addFeatures" style="right: 510px; background-color: #17a2b8;">添加聚合</div>
+        <div class="button" id="removeFeatures" style="right: 620px; background-color: #dc3545;">移除聚合</div>
+
+
+
     </div>
 
     <!-- 静态标注用的 Overlay 容器 -->
@@ -716,11 +746,30 @@
         var beijing = ol.proj.fromLonLat([116.3974, 39.9093]);
 
         // --- 数据图层加载 ---
+        const earthquakeSource = new ol.source.Vector({
+            url: '2012_Earthquakes_Mag5.kml',
+            format: new ol.format.KML({ extractStyles: true })
+        });
+
         const kmlLayer = new ol.layer.Vector({
-            source: new ol.source.Vector({
-                url: '2012_Earthquakes_Mag5.kml',
-                format: new ol.format.KML({ extractStyles: true })
-            })
+            source: earthquakeSource
+        });
+
+        // --- 热点图图层 ---
+        // 实例化一个热点图图层对象
+        const heatmapLayer = new ol.layer.Heatmap({
+            source: earthquakeSource,
+            blur: 15,
+            radius: 10,
+            weight: function (feature) {
+                // 根据地震震级（magnitude）设置权重
+                var name = feature.get('name');
+                if (name && name.startsWith('M ')) {
+                    var magnitude = parseFloat(name.substr(2));
+                    return magnitude - 5; // 震级在 5-9 之间，映射到 0-4
+                }
+                return 0.5;
+            }
         });
 
         const gpxLayer = new ol.layer.Vector({
@@ -753,17 +802,50 @@
         });
 
         map.addLayer(kmlLayer);
+        map.addLayer(heatmapLayer);
         map.addLayer(gpxLayer);
         map.addLayer(geojsonLayer);
 
         document.getElementById('kmlToggle').addEventListener('change', function (e) {
             kmlLayer.setVisible(e.target.checked);
         });
+        document.getElementById('heatmapToggle').addEventListener('change', function (e) {
+            heatmapLayer.setVisible(e.target.checked);
+        });
+
+        // 绑定热点图参数项的 input 事件
+        const radiusInput = document.getElementById('heatmap-radius');
+        const blurInput = document.getElementById('heatmap-blur');
+        const radiusVal = document.getElementById('radius-val');
+        const blurVal = document.getElementById('blur-val');
+
+        radiusInput.addEventListener('input', function () {
+            const radius = parseInt(radiusInput.value, 10);
+            radiusVal.innerText = radius;
+            heatmapLayer.setRadius(radius);
+        });
+
+        blurInput.addEventListener('input', function () {
+            const blur = parseInt(blurInput.value, 10);
+            blurVal.innerText = blur;
+            heatmapLayer.setBlur(blur);
+        });
         document.getElementById('gpxToggle').addEventListener('change', function (e) {
             gpxLayer.setVisible(e.target.checked);
         });
         document.getElementById('geojsonToggle').addEventListener('change', function (e) {
             geojsonLayer.setVisible(e.target.checked);
+        });
+
+        // --- 5. 初始化天气预报组件 (通过 weatherWidget.js) ---
+        const weatherSystem = new WeatherSystem({
+            amapKey: '5238a5ca7d94bf31d6868f0fad2a0202',
+            qweatherKey: '8c07f5ef1f4345e499e11028d7676bfc',
+            qweatherHost: 'jq6r7262hd.re.qweatherapi.com',
+            defaultAdcode: '110000',
+            onError: function(err) {
+                showCustomModal('alert', '天气组件提示', err);
+            }
         });
 
         // --- 4. 监听图层切换 ---
@@ -859,8 +941,15 @@
             var longitude = lonLat[0].toFixed(6);
             var latitude = lonLat[1].toFixed(6);
 
-            // 显示弹窗
-            showCustomModal('alert', '点击位置坐标', '经度 (Longitude): ' + longitude + '\n纬度 (Latitude): ' + latitude);
+            // 显示二次确认弹窗
+            showCustomModal(
+                'confirm', 
+                '经纬度坐标与天气查询', 
+                '经度 (Longitude): ' + longitude + '\n纬度 (Latitude): ' + latitude + '\n\n是否获取该位置的 24 小时天气预报？\n（注：查询将消耗一次和风天气 API 额度）', 
+                function() {
+                    weatherSystem.queryByLocation(longitude, latitude);
+                }
+            );
         });
 
         // 地图裁剪效果
@@ -946,6 +1035,23 @@
                 easing: ol.easing.elastic   // 弹性缓动效果
             });
         });
+
+        // --- 隐藏/展示标注按钮事件 ---
+        var markersVisible = true;
+        document.getElementById('toggleMarkersBtn').addEventListener('click', function () {
+            markersVisible = !markersVisible;
+            if (typeof markerLayer !== 'undefined') {
+                markerLayer.setVisible(markersVisible);
+            }
+            this.textContent = markersVisible ? "隐藏标注" : "展示标注";
+            this.style.backgroundColor = markersVisible ? "#6c757d" : "#007bff";
+
+            // 如果隐藏标注，同时关闭弹窗
+            if (!markersVisible && typeof popupOverlay !== 'undefined') {
+                popupOverlay.setPosition(undefined);
+            }
+        });
+
         var sketch;
         /**
          * 帮助提示框对象（The help tooltip element.）
@@ -1472,7 +1578,7 @@
             var imgContainer = document.getElementById('popup-img-container');
             var imgEl = document.getElementById('popup-image');
             if (props.image && props.image.trim() !== "") {
-                imgEl.src = "images/" + props.image; // Images are in the images/ folder
+                imgEl.src = "images/" + props.image;
                 imgContainer.style.display = 'block';
             } else {
                 imgContainer.style.display = 'none';
@@ -1633,6 +1739,69 @@
                 searchResults.style.display = 'block';
             }
         });
+        var count = 10000;
+        var features = new Array(count);
+        var e = 4500000;
+
+        // 1. 修复：循环体应该只包含生成点的逻辑
+        for (var i = 0; i < count; i++) {
+            var coordinates = [2 * Math.random() * e - e, 2 * Math.random() * e - e];
+            features[i] = new ol.Feature(new ol.geom.Point(coordinates));
+        }
+
+        // 2. 修复：聚合数据源从循环里提取出来
+        var source = new ol.source.Vector({ features: features });
+        var clusterSource = new ol.source.Cluster({ distance: 40, source: source });
+
+        // 3. 修复：原来代码中没有定义 clusterLayer，需要定义并给予聚合图标的样式
+        var clusterLayer = new ol.layer.Vector({
+            source: clusterSource,
+            style: function (feature) {
+                var size = feature.get('features').length;
+                return new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 10 + Math.max(0, size.toString().length * 2), // 根据数量调整大小
+                        stroke: new ol.style.Stroke({
+                            color: '#fff'
+                        }),
+                        fill: new ol.style.Fill({
+                            color: '#3399CC'
+                        })
+                    }),
+                    text: new ol.style.Text({
+                        text: size.toString(),
+                        fill: new ol.style.Fill({
+                            color: '#fff'
+                        })
+                    })
+                });
+            }
+        });
+
+        // 4. 修复：修改 getelementById 为 getElementById，并将绑定事件分离
+        // 添加聚合标注
+        document.getElementById('addFeatures').onclick = function () {
+            var currentFeatures = clusterSource.getSource().getFeatures();
+            // 修复：=是赋值，比较应该用 ===
+            if (currentFeatures.length === 0) {
+                // 如果数据源空了，就加回去
+                clusterSource.getSource().addFeatures(features);
+            }
+            // 将图层添加到地图上（判断防重复添加）
+            if (!map.getLayers().getArray().includes(clusterLayer)) {
+                map.addLayer(clusterLayer);
+            }
+        };
+
+        // 移除聚合标注
+        document.getElementById('removeFeatures').onclick = function () {
+            var currentFeatures = clusterSource.getSource().getFeatures();
+            if (currentFeatures.length !== 0) {
+                clusterSource.getSource().clear(); // 清空图层上的点
+            }
+            map.removeLayer(clusterLayer); // 将图层从地图卸载
+        };
+
 
     </script>
 </body>
